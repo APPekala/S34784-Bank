@@ -1,0 +1,114 @@
+package pl.bank34784;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
+
+@SpringBootApplication
+ class BankApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(BankApplication.class, args);
+	}
+	@RestController
+	@RequestMapping("/bank")
+	static class BankController {
+
+		private final BankService bankService = new BankService();
+
+		@PostMapping("/register")
+		public Client register(@RequestParam BigDecimal balance) {
+			return bankService.registerClient(balance);
+		}
+
+		@PostMapping("/deposit")
+		public Transaction deposit(@RequestParam Long clientId,
+		                           @RequestParam BigDecimal amount) {
+			return bankService.deposit(clientId, amount);
+		}
+
+		@PostMapping("/withdraw")
+		public Transaction withdraw(@RequestParam Long clientId,
+		                            @RequestParam BigDecimal amount) {
+			return bankService.withdraw(clientId, amount);
+		}
+
+		@GetMapping("/client/{id}")
+		public Client getClient(@PathVariable Long id) {
+			return bankService.getClient(id);
+		}
+	}
+	static class BankService {
+
+		private final Map<Long, Client> clients = new HashMap<>();
+		private final AtomicLong idGenerator = new AtomicLong(1);
+
+		public Client registerClient(BigDecimal initialBalance) {
+			Long id = idGenerator.getAndIncrement();
+			Client client = new Client(id, initialBalance);
+			clients.put(id, client);
+			return client;
+		}
+
+		public Transaction deposit(Long clientId, BigDecimal amount) {
+			Client client = clients.get(clientId);
+			if (client == null) {
+				return new Transaction(TransactionStatus.DECLINED, null);
+			}
+
+			client.balance = client.balance.add(amount);
+			return new Transaction(TransactionStatus.ACCEPTED, client.balance);
+		}
+
+		public Transaction withdraw(Long clientId, BigDecimal amount) {
+			Client client = clients.get(clientId);
+			if (client == null) {
+				return new Transaction(TransactionStatus.DECLINED, null);
+			}
+
+			if (client.balance.compareTo(amount) < 0) {
+				return new Transaction(TransactionStatus.DECLINED, client.balance);
+			}
+
+			client.balance = client.balance.subtract(amount);
+			return new Transaction(TransactionStatus.ACCEPTED, client.balance);
+		}
+
+		public Client getClient(Long id) {
+			Client client = clients.get(id);
+			if (client == null) {
+				throw new RuntimeException("Client not found");
+			}
+			return client;
+		}
+	}
+	static class Client {
+		public Long id;
+		public BigDecimal balance;
+
+		public Client(Long id, BigDecimal balance) {
+			this.id = id;
+			this.balance = balance;
+		}
+	}
+
+	static class Transaction {
+		public TransactionStatus status;
+		public BigDecimal newBalance;
+
+		public Transaction(TransactionStatus status, BigDecimal newBalance) {
+			this.status = status;
+			this.newBalance = newBalance;
+		}
+	}
+
+	enum TransactionStatus {
+		ACCEPTED,
+		DECLINED
+	}
+}
